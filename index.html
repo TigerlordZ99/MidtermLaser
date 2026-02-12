@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Laser Puzzle Generator</title>
+    <style>
+        /* SITE STYLING: Dark mode aesthetics and layout */
+        body {
+            background: #1a1a2e;
+            color: white;
+            font-family: 'Segoe UI', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            display: flex;
+            gap: 20px;
+            background: #16213e;
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid #4ecca3;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        canvas {
+            background: #000;
+            border-radius: 5px;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            min-width: 240px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .label-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+
+        label {
+            font-size: 0.9em;
+            color: #4ecca3;
+        }
+
+        .val-display {
+            font-weight: bold;
+            color: #fff;
+            background: #1a1a2e;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+
+        button {
+            padding: 12px;
+            cursor: pointer;
+            background: #e94560;
+            border: none;
+            color: white;
+            font-weight: bold;
+            border-radius: 5px;
+            margin-top: 5px;
+            transition: 0.2s;
+        }
+
+        button:hover {
+            background: #ff4d6d;
+        }
+
+        button.secondary {
+            background: #0f3460;
+        }
+
+        button.secondary:hover {
+            background: #16213e;
+            border: 1px solid #4ecca3;
+        }
+
+        input[type=range] {
+            cursor: pointer;
+            accent-color: #e94560;
+        }
+
+        input[type=text] {
+            background: #1a1a2e;
+            border: 1px solid #0f3460;
+            color: #4ecca3;
+            padding: 8px;
+            border-radius: 5px;
+            font-family: monospace;
+        }
+
+        .check-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.9em;
+            color: #4ecca3;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>Laser Puzzle Generator</h2>
+    <div class="container">
+        <canvas id="gameCanvas" width="500" height="500"></canvas>
+        <div class="controls">
+            <div class="control-group">
+                <div class="label-row"><label>Map Size</label><span id="v-size" class="val-display">8</span></div>
+                <input type="range" id="size" min="6" max="10" value="8" oninput="updateUI()">
+            </div>
+            <div class="control-group">
+                <div class="label-row"><label>Mirrors</label><span id="v-mirrors" class="val-display">4</span></div>
+                <input type="range" id="mirrors" min="1" max="10" value="4" oninput="updateUI()">
+            </div>
+            <div class="control-group">
+                <div class="label-row"><label>Obstacles</label><span id="v-walls" class="val-display">12</span></div>
+                <input type="range" id="walls" min="0" max="20" value="12" oninput="updateUI()">
+            </div>
+
+            <div class="control-group">
+                <label>Puzzle Seed</label>
+                <input type="text" id="seedInput" placeholder="Enter seed...">
+                <button class="secondary" onclick="loadSeed()">Load Seed</button>
+            </div>
+
+            <label class="check-row">
+                <input type="checkbox" id="showLaser" checked onchange="draw()"> Show Laser Path
+            </label>
+
+            <button onclick="initNew()">Generate New</button>
+            <button class="secondary" onclick="exportImage()">Export JPG</button>
+        </div>
+    </div>
+
+    <script>
+        // INITIALIZATION
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        let grid = [], solutionPath = new Set();
+        let size, mirrorTarget, wallTarget, cellSize, startY, currentSeed;
+
+        function updateUI() {
+            document.getElementById('v-size').innerText = document.getElementById('size').value;
+            document.getElementById('v-mirrors').innerText = document.getElementById('mirrors').value;
+            document.getElementById('v-walls').innerText = document.getElementById('walls').value;
+        }
+
+        // Custom Random function for Seeds
+        function seededRandom(seed) {
+            var x = Math.sin(seed) * 10000;
+            return x - Math.floor(x);
+        }
+
+        function initNew() {
+            currentSeed = Math.floor(Math.random() * 999999);
+            document.getElementById('seedInput').value = currentSeed;
+            init();
+        }
+
+        function loadSeed() {
+            const input = document.getElementById('seedInput').value;
+            if (input) {
+                currentSeed = parseInt(input);
+                init();
+            }
+        }
+
+        function init() {
+            size = parseInt(document.getElementById('size').value);
+            mirrorTarget = parseInt(document.getElementById('mirrors').value);
+            wallTarget = parseInt(document.getElementById('walls').value);
+            cellSize = canvas.width / size;
+            generate();
+        }
+
+        // GENERATOR
+        function generate() {
+            let success = false;
+            let localSeed = currentSeed;
+            while (!success) {
+                grid = Array(size).fill().map(() => Array(size).fill(0));
+                solutionPath.clear();
+
+                // Use seeded randoms
+                startY = Math.floor(seededRandom(localSeed++) * size);
+                const endY = Math.floor(seededRandom(localSeed++) * size);
+
+                grid[startY][0] = 4;
+                grid[endY][size - 1] = 5;
+
+                if (weave(0, startY, 1, 0, 0, 0, localSeed)) {
+                    if (verify()) {
+                        addTrickyObstacles(localSeed);
+                        draw();
+                        success = true;
+                    }
+                }
+                localSeed += 100; // Offset for next attempt
+            }
+        }
+
+        function verify() {
+            let y = startY, x = 0, dx = 1, dy = 0;
+            for (let i = 0; i < 100; i++) {
+                let nx = x + dx, ny = y + dy;
+                if (nx < 0 || nx >= size || ny < 0 || ny >= size) return false;
+                x = nx; y = ny;
+                if (grid[y][x] === 5) return true;
+                if (grid[y][x] === 2) [dx, dy] = [-dy, -dx];
+                else if (grid[y][x] === 3) [dx, dy] = [dy, dx];
+                else if (grid[y][x] === 1) return false;
+            }
+            return false;
+        }
+
+        function weave(x, y, dx, dy, mirrorsUsed, depth, s) {
+            if (x < 0 || x >= size || y < 0 || y >= size || depth > 40) return false;
+            if (depth > 0 && x === 0 && y === startY) return false;
+            const key = `${x},${y}`;
+            if (grid[y][x] === 5) return mirrorsUsed === mirrorTarget;
+            if (grid[y][x] !== 0 && grid[y][x] !== 4 && grid[y][x] !== 2 && grid[y][x] !== 3) return false;
+
+            if (weave(x + dx, y + dy, dx, dy, mirrorsUsed, depth + 1, s)) {
+                solutionPath.add(key);
+                return true;
+            }
+
+            if (mirrorsUsed < mirrorTarget && grid[y][x] === 0) {
+                const types = seededRandom(s + depth) > 0.5 ? [2, 3] : [3, 2];
+                for (let type of types) {
+                    grid[y][x] = type;
+                    let ndx = (type === 2) ? -dy : dy, ndy = (type === 2) ? -dx : dx;
+                    if (weave(x + ndx, y + ndy, ndx, ndy, mirrorsUsed + 1, depth + 1, s)) {
+                        solutionPath.add(key);
+                        return true;
+                    }
+                    grid[y][x] = 0;
+                }
+            }
+            return false;
+        }
+
+        function addTrickyObstacles(s) {
+            let count = 0, attempts = 0;
+            while (count < wallTarget && attempts < 1000) {
+                let rx = Math.floor(seededRandom(s + attempts) * size);
+                let ry = Math.floor(seededRandom(s + attempts + 1) * size);
+                let isNextToPath = false;
+                for (let n of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
+                    if (solutionPath.has(`${rx + n[0]},${ry + n[1]}`)) { isNextToPath = true; break; }
+                }
+                if (rx > 0 && rx < size - 1 && grid[ry][rx] === 0 && !solutionPath.has(`${rx},${ry}`)) {
+                    if (isNextToPath || seededRandom(s + attempts + 2) < 0.1) {
+                        grid[ry][rx] = 1;
+                        count++;
+                    }
+                }
+                attempts += 3;
+            }
+        }
+
+        function draw() {
+            ctx.fillStyle = "#000";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const val = grid[y][x];
+                    ctx.strokeStyle = "#16213e";
+                    ctx.strokeRect(x * cellSize, y * cellSize, cellSize, cellSize);
+                    if (val === 1) { ctx.fillStyle = "#444"; ctx.fillRect(x * cellSize + 4, y * cellSize + 4, cellSize - 8, cellSize - 8); }
+                    if (val === 4) { ctx.fillStyle = "#0f0"; ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize); }
+                    if (val === 5) { ctx.fillStyle = "#f00"; ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize); }
+                    ctx.strokeStyle = "#4ecca3"; ctx.lineWidth = 3;
+                    if (val === 2) { ctx.beginPath(); ctx.moveTo((x + 1) * cellSize - 10, y * cellSize + 10); ctx.lineTo(x * cellSize + 10, (y + 1) * cellSize - 10); ctx.stroke(); }
+                    if (val === 3) { ctx.beginPath(); ctx.moveTo(x * cellSize + 10, y * cellSize + 10); ctx.lineTo((x + 1) * cellSize - 10, (y + 1) * cellSize - 10); ctx.stroke(); }
+                }
+            }
+            if (document.getElementById('showLaser').checked) renderLaser();
+        }
+
+        function renderLaser() {
+            let y = startY, x = 0, dx = 1, dy = 0;
+            ctx.strokeStyle = "#f0f"; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.moveTo(cellSize / 2, y * cellSize + cellSize / 2);
+            for (let i = 0; i < 100; i++) {
+                let nx = x + dx, ny = y + dy;
+                if (nx < 0 || nx >= size || ny < 0 || ny >= size) break;
+                x = nx; y = ny;
+                ctx.lineTo(x * cellSize + cellSize / 2, y * cellSize + cellSize / 2);
+                if (grid[y][x] === 2) [dx, dy] = [-dy, -dx];
+                else if (grid[y][x] === 3) [dx, dy] = [dy, dx];
+                else if (grid[y][x] === 1 || grid[y][x] === 5) break;
+            }
+            ctx.stroke();
+        }
+
+        function exportImage() {
+            const link = document.createElement('a');
+            link.download = `laser_seed_${currentSeed}.jpg`;
+            link.href = canvas.toDataURL('image/jpeg', 1.0);
+            link.click();
+        }
+
+        updateUI();
+        initNew();
+    </script>
+</body>
+
+</html>
