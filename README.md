@@ -25,7 +25,11 @@ Generate: Adjust the sliders and click Generate New.
 
 Toggle Laser: Uncheck Show Laser Path to see the puzzle as a player would.
 
+
+I used gen AI to convert this from a Unity project to a HTML project since Unity was giving me a ton of problems.
+
 Seed: Copy the seed to save a layout, or paste one in to load an old puzzle, as long as the other parameters are the same.
 
 
 Export: Click Export JPG to save the grid as an image.
+
